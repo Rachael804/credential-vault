@@ -10,12 +10,14 @@ void printBanner() {
               << "=====================================================\n"
               << " [1] View All Stored Credentials\n"
               << " [2] Search Credential by Service\n"
-              << " [3] Add New Credential\n"
-              << " [4] Generate Cryptographic Password\n"
-              << " [5] Delete a Credential\n"
-              << " [6] Save & Exit Vault\n"
+              << " [3] Copy Password to Clipboard (Auto-Wipe 15s)\n"
+              << " [4] Add New Credential\n"
+              << " [5] Generate Cryptographic Password\n"
+              << " [6] Change Master Password\n"
+              << " [7] Delete a Credential\n"
+              << " [8] Save & Exit Vault\n"
               << "=====================================================\n"
-              << "Select an option [1-6]: ";
+              << "Select an option [1-8]: ";
 }
 
 int main() {
@@ -36,7 +38,7 @@ int main() {
         if (!(std::cin >> choice)) {
             std::cin.clear();
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            std::cout << "\n[!] Invalid input. Enter a number between 1 and 6.\n";
+            std::cout << "\n[!] Invalid input. Enter a number between 1 and 8.\n";
             continue;
         }
 
@@ -50,6 +52,11 @@ int main() {
             std::getline(std::cin, q);
             vault.searchEntries(q);
         } else if (choice == 3) {
+            std::cout << "Enter exact service name to copy password: ";
+            std::string svc;
+            std::getline(std::cin, svc);
+            vault.copyPasswordToClipboard(svc);
+        } else if (choice == 4) {
             CredentialEntry entry;
             std::cout << "Service Name (e.g. GitHub): ";
             std::getline(std::cin, entry.service);
@@ -74,7 +81,7 @@ int main() {
             entry.dateAdded = VaultManager::getCurrentDate();
 
             vault.addEntry(entry);
-        } else if (choice == 4) {
+        } else if (choice == 5) {
             int len = 16;
             std::cout << "Desired password length (default 16): ";
             if (!(std::cin >> len) || len <= 4) len = 16;
@@ -82,17 +89,19 @@ int main() {
 
             std::string generated = VaultManager::generatePassword(len, true);
             std::cout << "\n[+] Generated Key: " << generated << "\n";
-        } else if (choice == 5) {
+        } else if (choice == 6) {
+            vault.changeMasterPassword();
+        } else if (choice == 7) {
             std::cout << "Enter exact service name to delete: ";
             std::string svc;
             std::getline(std::cin, svc);
             vault.deleteEntry(svc);
-        } else if (choice == 6) {
+        } else if (choice == 8) {
             vault.saveToFile();
             std::cout << "\n[✓] Vault encrypted and closed safely.\n";
             break;
         } else {
-            std::cout << "\n[!] Unknown choice. Select 1 through 6.\n";
+            std::cout << "\n[!] Unknown choice. Select 1 through 8.\n";
         }
     }
 

@@ -8,6 +8,8 @@
 #include <chrono>
 #include <ctime>
 #include <algorithm>
+#include <thread>
+#include <windows.h>
 
 bool VaultManager::authenticate() {
     std::ifstream check(vaultPath, std::ios::binary);
@@ -70,11 +72,9 @@ bool VaultManager::saveToFile() {
     std::ofstream file(vaultPath, std::ios::binary | std::ios::trunc);
     if (!file.is_open()) return false;
 
-    // Header: 64-character SHA-256 verification hash
     std::string masterHash = Crypto::SHA256::hashString(masterPassword);
     file.write(masterHash.data(), 64);
 
-    // Payload: Encrypted serialized credential entries
     std::string serialized = serializeEntries();
     std::vector<uint8_t> encrypted = Crypto::encryptPayload(serialized, masterPassword);
     file.write(reinterpret_cast<const char*>(encrypted.data()), encrypted.size());
@@ -179,6 +179,85 @@ bool VaultManager::deleteEntry(const std::string& service) {
 
     std::cout << "\n[!] Entry not found.\n";
     return false;
+}
+
+bool VaultManager::copyPasswordToClipboard(const std::string& service) {
+    std::string targetPassword = "";
+    for (const auto& item : entries) {
+        if (item.service == service) {
+            targetPassword = item.password;
+            break;
+        }
+    }
+
+    if (targetPassword.empty()) {
+        std::cout << "\n[!] Service '" << service << "' not found.\n";
+        return false;
+    }
+
+    if (!OpenClipboard(nullptr)) {
+        std::cout << "\n[!] Failed to access Windows clipboard.\n";
+        return false;
+    }
+
+    EmptyClipboard();
+    HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, targetPassword.size() + 1);
+    if (!hGlob) {
+        CloseClipboard();
+        return false;
+    }
+
+    memcpy(GlobalLock(hGlob), targetPassword.c_str(), targetPassword.size() + 1);
+    GlobalUnlock(hGlob);
+    SetClipboardData(CF_TEXT, hGlob);
+    CloseClipboard();
+
+    std::cout << "\n[✓] Password copied to clipboard!\n";
+    std::cout << "[i] Security daemon: Clipboard will be auto-wiped in 15 seconds.\n";
+
+    std::thread([targetPassword]() {
+        std::this_thread::sleep_for(std::chrono::seconds(15));
+        if (OpenClipboard(nullptr)) {
+            HANDLE hData = GetClipboardData(CF_TEXT);
+            if (hData) {
+                char* pszText = static_cast<char*>(GlobalLock(hData));
+                if (pszText && std::string(pszText) == targetPassword) {
+                    EmptyClipboard();
+                }
+                GlobalUnlock(hData);
+            }
+            CloseClipboard();
+        }
+    }).detach();
+
+    return true;
+}
+
+bool VaultManager::changeMasterPassword() {
+    std::string currentAttempt;
+    std::cout << "\nEnter CURRENT Master Password to verify identity: ";
+    std::getline(std::cin, currentAttempt);
+
+    if (Crypto::SHA256::hashString(currentAttempt) != Crypto::SHA256::hashString(masterPassword)) {
+        std::cout << "[✗] Authentication failed. Master Password unchanged.\n";
+        return false;
+    }
+
+    std::string newPass, confirmPass;
+    std::cout << "Enter NEW Master Password: ";
+    std::getline(std::cin, newPass);
+    std::cout << "Confirm NEW Master Password: ";
+    std::getline(std::cin, confirmPass);
+
+    if (newPass.empty() || newPass != confirmPass) {
+        std::cout << "[✗] Passwords do not match or are empty. Action canceled.\n";
+        return false;
+    }
+
+    masterPassword = newPass;
+    saveToFile();
+    std::cout << "\n[✓] Master Password successfully updated and all vault data re-encrypted!\n";
+    return true;
 }
 
 std::string VaultManager::generatePassword(int length, bool includeSymbols) {

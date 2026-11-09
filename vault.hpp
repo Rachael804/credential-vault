@@ -29,6 +29,9 @@ public:
     void listEntries() const;
     void searchEntries(const std::string& query) const;
     bool deleteEntry(const std::string& service);
+    bool copyPasswordToClipboard(const std::string& service);
+    bool changeMasterPassword();
+
     static std::string generatePassword(int length, bool includeSymbols);
     static std::string getCurrentDate();
 };
